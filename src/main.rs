@@ -1,54 +1,42 @@
-use std::env;
+#![warn(clippy::str_to_string)]
 
-use serenity::async_trait;
-use serenity::builder::CreateMessage;
-use serenity::model::channel::Message;
-use serenity::model::gateway::Ready;
-use serenity::prelude::*;
+mod commands;
 
-struct Handler;
+use commands::age::age;
+use commands::ball::ball;
+use commands::coinflip::coinflip;
+use commands::help::help;
+use commands::pfp::pfp;
+use commands::repo::repo;
 
-#[async_trait]
-impl EventHandler for Handler {
-    async fn message(&self, context: Context, msg: Message) {
-        if msg.content == "!ping" {
-            println!("Shard {}", context.shard_id);
-            // Sending a message can fail, due to a network error, an authentication error, or lack
-            // of permissions to post in the channel, so log to stdout when some error happens,
-            // with a description of it.
-            if let Err(why) = msg.channel_id.say(&context.http, "Pong!").await {
-                println!("Error sending message: {why:?}");
-            }
-        }
+use dotenv::dotenv;
+use poise::serenity_prelude as serenity;
 
-        if msg.content == "!messageme" {
-            let builder = CreateMessage::new().content("YOHOHOHO!");
-            let dm = msg.author.dm(&context, builder).await;
-
-            if let Err(why) = dm {
-                println!("Error when direct messaging user: {why:?}");
-            }
-        }
-    }
-
-    async fn ready(&self, _: Context, ready: Ready) {
-        println!("{} is connected!", ready.user.name);
-    }
-}
+struct Data {}
+type Error = Box<dyn std::error::Error + Send + Sync>;
+type Context<'a> = poise::Context<'a, Data, Error>;
 
 #[tokio::main]
 async fn main() {
-    // Configure the client with your Discord bot token in the environment.
-    let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
-    let intents = GatewayIntents::GUILD_MESSAGES
-        | GatewayIntents::DIRECT_MESSAGES
-        | GatewayIntents::MESSAGE_CONTENT;
-    let mut client = Client::builder(&token, intents)
-        .event_handler(Handler)
-        .await
-        .expect("Err creating client");
+    dotenv().ok();
+    let token = std::env::var("DISCORD_TOKEN").expect("missing DISCORD_TOKEN");
+    let intents = serenity::GatewayIntents::non_privileged();
 
-    if let Err(why) = client.start().await {
-        println!("Client error: {why:?}");
-    }
+    let framework = poise::Framework::builder()
+        .options(poise::FrameworkOptions {
+            commands: vec![help(), age(), pfp(), ball(), coinflip(), repo()],
+            ..Default::default()
+        })
+        .setup(|ctx, _ready, framework| {
+            Box::pin(async move {
+                poise::builtins::register_globally(ctx, &framework.options().commands).await?;
+                Ok(Data {})
+            })
+        })
+        .build();
+
+    let client = serenity::ClientBuilder::new(token, intents)
+        .framework(framework)
+        .await;
+    client.unwrap().start().await.unwrap();
 }
