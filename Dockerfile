@@ -9,17 +9,19 @@ COPY Cargo.toml Cargo.lock ./
 
 # Create an empty src directory to trick Cargo into thinking it's a valid Rust project
 RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN cargo build --release
+RUN cargo build
 
 COPY ./src ./src
-RUN cargo build --release
+RUN cargo build
 
 # Create a docker file using bookworm
 FROM debian:bookworm-slim
 RUN apt-get update && \
-    apt-get install -y libssl1.1 && \
+    apt-get install -y libssl3 && \
     rm -rf /var/lib/apt/lists/*
+
 WORKDIR /usr/src/app
-COPY --from=builder /usr/src/app/target/release/monke ./monke
+
+COPY --from=builder /usr/src/app/target/debug/monke ./monke
 COPY .env .env
 CMD ["sh", "-c", "export $(cat .env) && ./monke"]
